@@ -1,10 +1,11 @@
-package com.sk.rbassignment
+package com.sk.rbassignment.activity
 
 import android.Manifest.permission
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -12,47 +13,68 @@ import android.view.MenuItem
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.sk.rbassignment.R
+import com.sk.rbassignment.R.id
+import com.sk.rbassignment.R.layout
+import com.sk.rbassignment.R.string
 import com.sk.rbassignment.services.SyncService
+import com.sk.rbassignment.utils.Actions
 import com.sk.rbassignment.utils.MyRuntimePermission
+import com.sk.rbassignment.utils.ServiceState
+import com.sk.rbassignment.utils.getServiceState
+import com.sk.rbassignment.utils.log
 import kotlinx.android.synthetic.main.activity_main.toolbar
 
 class MainActivity : AppCompatActivity() {
 
-    private var mServiceIntent: Intent? = null
-    private var mSyncService: SyncService? = null
     private var buttonStartStop: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(layout.activity_main)
         setSupportActionBar(toolbar)
 
-        buttonStartStop = findViewById(R.id.buttonStartStop)
+        buttonStartStop = findViewById(id.buttonStartStop)
         setUpViewListener()
     }
 
     private fun setUpViewListener() {
-        mSyncService = SyncService()
-        mServiceIntent = Intent(this, mSyncService?.javaClass)
-        if (!isMyServiceRunning(mSyncService?.javaClass!!)) {
-            buttonStartStop?.text = getString(R.string.hint_start)
+        if (!isMyServiceRunning(SyncService().javaClass)) {
+            buttonStartStop?.text = getString(string.hint_start)
         } else {
-            buttonStartStop?.text = getString(R.string.hint_stop)
+            buttonStartStop?.text = getString(string.hint_stop)
         }
 
         buttonStartStop?.setOnClickListener {
-            if (!isMyServiceRunning(mSyncService?.javaClass!!)) {
-                if (ActivityCompat.checkSelfPermission(this,
-                        permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                    startService(mServiceIntent)
-                    buttonStartStop?.text = getString(R.string.hint_stop)
+            if (!isMyServiceRunning(SyncService().javaClass)) {
+                if (ActivityCompat.checkSelfPermission(
+                        this,
+                        permission.WRITE_EXTERNAL_STORAGE
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    actionOnService(Actions.START)
+                    buttonStartStop?.text = getString(string.hint_stop)
                 } else {
                     MyRuntimePermission(this).checkPermissionForExternalStorage()
                 }
             } else {
-                stopService(mServiceIntent)
-                buttonStartStop?.text = getString(R.string.hint_start)
+                actionOnService(Actions.STOP)
+                buttonStartStop?.text = getString(string.hint_start)
             }
+        }
+    }
+
+    private fun actionOnService(action: Actions) {
+        if (getServiceState(this) == ServiceState.STOPPED && action == Actions.STOP) return
+        Intent(this, SyncService::class.java).also {
+            it.action = action.name
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                log("Starting the service in >=26 Mode")
+                startForegroundService(it)
+                return
+            }
+            log("Starting the service in < 26 Mode")
+            startService(it)
         }
     }
 
@@ -60,8 +82,8 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startService(mServiceIntent)
-                buttonStartStop?.text = getString(R.string.hint_stop)
+                actionOnService(Actions.START)
+                buttonStartStop?.text = getString(string.hint_stop)
             }
         }
     }
@@ -89,7 +111,7 @@ class MainActivity : AppCompatActivity() {
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         return when (item.itemId) {
-            R.id.action_settings -> true
+            id.action_settings -> true
             else -> super.onOptionsItemSelected(item)
         }
     }
